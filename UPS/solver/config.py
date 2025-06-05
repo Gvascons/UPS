@@ -1,6 +1,7 @@
 # Solver Configuration - Mode 1 Settings
-# Contains parameters, timeouts, output directories, and model settings for solution generation
+# Contains parameters, timeouts, output directories, and model settings for metadata generation
 # Configures LLM providers, execution limits, and artifact management
 
-# Configuration for solution generation
-OUTPUT_DIR = "outputs"
+# Configuration for metadata generation
+METADATA_DIR = "metadata"
+OUTPUT_DIR = "output"
