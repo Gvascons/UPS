@@ -72,12 +72,17 @@ htmlcov/
 dmypy.json
 
 # Output directories
-outputs/
+output/
 metadata/
 *.png
 *.jpg
 *.jpeg
 *.pdf
+
+# Solver/Evolver specific
+solver_graph.png
+problem_solver_graph.png
+*.graph.png
 
 # Logs
 *.log
@@ -98,13 +103,37 @@ credentials.json
 .langsmith/
 .langfuse/
 
+# UPS System specific
+# Keep solver/evolver Python files but ignore runtime artifacts
+*.execution.log
+*.trace.json
+UPS/UPS/solver/__pycache__/
+UPS/UPS/evolver/__pycache__/
+
 # Model files
 *.pkl
 *.joblib
 *.model
 
 # Data files (optional - uncomment if you don't want to track data)
-# *.csv
-# *.json
-# *.parquet
-# data/ 
+*.csv
+*.json
+*.parquet
+data/
+
+# Input files (DO NOT IGNORE - these are our prompts/contexts)
+!context.txt
+!input.txt
+!*.context.txt
+
+# Generated solution files in output directory
+output/*.py
+output/*.csv
+output/*.txt
+output/*.json
+
+# Step-by-step files in metadata directory  
+metadata/step*.txt
+metadata/step*.py
+metadata/step*.csv
+metadata/step*.json 
