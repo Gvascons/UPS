@@ -1,4 +1,4 @@
-# Evolver Tools - Mode 2 Evolution Capabilities
-# Provides tools for solution mutation, optimization, and performance measurement
-# Includes parameter tuning, code transformation, performance benchmarking, and solution comparison utilities
-# Enables the evolver to systematically improve solutions through various evolutionary strategies 
+# Evolver Tools - Mode 2 Execution Environment
+# Specialized tools for solution evaluation, performance measurement, and mutation testing
+# Provides safe execution sandbox for evaluating evolved solutions with comprehensive metrics
+# Supports two-stage evaluation cascade: quick screening and full performance assessment 
