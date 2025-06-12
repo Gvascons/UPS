@@ -13,22 +13,18 @@ import tempfile
 import traceback
 import os
 import sys
-import logging
-
-# Configure logging
-logger = logging.getLogger(__name__)
 
 # Instantiate the search tool once for reuse
 ddgo_search = DuckDuckGoSearchRun(max_results=10)
 
 @tool
-def execute_python_code(code: str, timeout: int = 60) -> Dict[str, Any]:
+def execute_python_code(code: str, timeout: int = 1200) -> Dict[str, Any]:
     """
     Execute Python code in an isolated subprocess and capture the output.
 
     Args:
         code: The Python code to execute as a string
-        timeout: Maximum execution time in seconds (default: 60)
+        timeout: Maximum execution time in seconds (default: 1200)
 
     Returns:
         A dictionary containing the execution results and any errors
@@ -124,7 +120,7 @@ def execute_python_code(code: str, timeout: int = 60) -> Dict[str, Any]:
             try:
                 os.unlink(temp_file_path)
             except Exception as cleanup_error:
-                logger.warning(f"Could not delete temp file {temp_file_path}: {cleanup_error}")
+                print(f"Could not delete temp file {temp_file_path}: {cleanup_error}")
 
     return execution_result
 
@@ -140,7 +136,7 @@ def web_search(query: str) -> str:
     Returns:
         Search results as a string
     """
-    logger.info(f"Executing web search: {query}")
+    print(f"Executing web search: {query}")
     
     if not query.strip():
         return "Error: Empty search query provided"
@@ -153,13 +149,13 @@ def web_search(query: str) -> str:
             return f"No results found for query: {query}"
         
         # Truncate very long results to avoid overwhelming context
-        max_length = 3000
+        max_length = 5000
         if len(search_results) > max_length:
             search_results = search_results[:max_length] + "\n\n... (results truncated for brevity)"
             
         return search_results
     except Exception as e:
-        logger.error(f"Error during web search for '{query}': {e}")
+        print(f"Error during web search for '{query}': {e}")
         return f"Failed to perform web search for query: {query}. Error: {e}"
 
 # Define the tools list with only the essential tools

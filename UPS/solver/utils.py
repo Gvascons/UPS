@@ -1,6 +1,19 @@
 # Solver Utilities
 # Helper functions for the solver module
 
+from .schemas import SolverState
+
+# --- Initial State ---
+def create_initial_state(user_input: str) -> SolverState:
+    """Creates the initial state for the solver graph."""
+    return SolverState(
+        input=user_input,  # User input
+        plan=[],  # Initialize plan as empty list
+        past_steps=[],  # Initialize past_steps as empty list
+        response="",  # Initialize response as empty string
+        content="",  # Initialize content as empty string
+    )
+
 def save_graph_image(graph, filename="solver_graph.png"):
     """Saves a visualization of the solver graph."""
     try:

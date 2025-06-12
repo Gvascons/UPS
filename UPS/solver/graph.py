@@ -9,12 +9,12 @@ from .nodes import planner_node, agent_node, replanner_node
 
 def should_end(state: SolverState) -> Literal["agent", "__end__"]:
     """Determines whether the graph should continue or end."""
-    if state.get("response"):
+    if state.get("response"): # Check if response is generated
         return END
     elif not state.get("plan"):  # Check if plan is empty or None
         return END
     else:
-        return "agent"  # Loop back to agent node
+        return "agent"  # Loop back to agent node if plan is not empty
 
 def create_solver():
     """Creates and compiles the Mode 1 Solution Generator."""

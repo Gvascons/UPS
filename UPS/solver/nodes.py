@@ -11,10 +11,6 @@ from .prompts import planner_prompt, format_execute_step_prompt, replanner_promp
 from .tools import tools, tool_node
 from .config import METADATA_DIR, OUTPUT_DIR
 import os
-import logging
-
-# Configure logging
-logger = logging.getLogger(__name__)
 
 
 async def planner_node(state: SolverState, config: RunnableConfig) -> dict:
@@ -35,12 +31,8 @@ async def planner_node(state: SolverState, config: RunnableConfig) -> dict:
     
     # Validate input
     if not state.get("input"):
-        logger.error("No input provided in state")
+        print("ERROR: No input provided in state")
         raise ValueError("No input provided in state - cannot generate plan")
-
-    # Ensure directories exist for tracking and outputs
-    os.makedirs(METADATA_DIR, exist_ok=True)
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     try:
         # Use structured output to get a proper Plan object
@@ -51,17 +43,13 @@ async def planner_node(state: SolverState, config: RunnableConfig) -> dict:
         
         # Check if we got valid steps
         if not plan_result or not plan_result.steps:
-            logger.warning("Structured output returned empty plan, falling back")
+            print("WARNING: Structured output returned empty plan, falling back")
             raise ValueError("Empty plan from structured output")
-        
-        logger.info(f"Generated plan with {len(plan_result.steps)} steps:")
-        for i, step in enumerate(plan_result.steps, 1):
-            logger.info(f"  {i}. {step}")
             
         return {"plan": plan_result.steps}
         
     except Exception as e:
-        logger.warning(f"Error using structured output for planner: {e}")
+        print(f"WARNING: Error using structured output for planner: {e}")
         
         # Fallback to raw output and manual parsing
         planner = planner_prompt | llm
@@ -84,11 +72,7 @@ async def planner_node(state: SolverState, config: RunnableConfig) -> dict:
         if not steps:
             # If parsing failed, create a default single step
             steps = [f"Solve the problem: {state['input']}"]
-            logger.warning("Plan parsing failed, using default single step")
-        
-        logger.info(f"Parsed {len(steps)} steps from raw output:")
-        for i, step in enumerate(steps, 1):
-            logger.info(f"  {i}. {step}")
+            print("WARNING: Plan parsing failed, using default single step")
             
         return {"plan": steps}
 
@@ -112,13 +96,12 @@ async def agent_node(state: SolverState, config: RunnableConfig) -> dict:
 
     plan = state.get("plan", [])
     if not plan:
-        logger.warning("Agent called with empty plan")
+        print("WARNING: Agent called with empty plan")
         return {"past_steps": [("Execution", "No plan to execute.")]}
 
     # Get the first task from the plan
     task = plan[0]
-    logger.info(f"Agent executing step: {task}")
-    
+        
     # Format the task for execution
     task_formatted = format_execute_step_prompt(state)
 
@@ -131,28 +114,40 @@ async def agent_node(state: SolverState, config: RunnableConfig) -> dict:
 
     try:
         for i in range(max_iterations):
-            logger.debug(f"ReAct iteration {i+1} for task: {task}")
+            print(f"ReAct iteration {i+1} for task: {task}")
             
             response = await model_with_tools.ainvoke(messages, config=config)
             
             # Check if LLM returned a valid response
             if response is None:
-                logger.error(f"LLM returned None for task: {task}")
+                print(f"ERROR: LLM returned None for task: {task}")
                 result = "LLM returned no response."
                 break
-
-            logger.debug(f"LLM response: {response.content}")
+            
+            # Show the full LLM reasoning
+            if hasattr(response, 'content') and response.content:
+                if isinstance(response.content, str):
+                    print(f"\nLLM Reasoning: {response.content}")
+                elif isinstance(response.content, list):
+                    print(f"\nLLM Reasoning (structured):")
+                    for i, item in enumerate(response.content):
+                        print(f"  Part {i+1}: {item}")
+                else:
+                    print(f"\nLLM Reasoning (raw): {response.content}")
+            else:
+                print("\nLLM Reasoning: [No reasoning provided - LLM sent only tool calls]")
+            
             messages.append(response)
 
             # Check if LLM wants to use tools
             if not response.tool_calls:
-                logger.info(f"Task completed - no tool calls in response: {task}")
-                result = response.content  # Use final LLM response as result
+                print(f"Task completed - no tool calls requested")
+                result = response.content if response.content else "Task completed without explicit reasoning."
                 break
 
             # Execute the requested tools
             tool_names = [tc.get('name', 'N/A') for tc in response.tool_calls]
-            logger.info(f"Executing tools: {tool_names}")
+            print(f"\nExecuting tools: {tool_names}")
             
             tool_invocation_result = await tool_node.ainvoke({"messages": [response]}, config=config)
 
@@ -165,12 +160,12 @@ async def agent_node(state: SolverState, config: RunnableConfig) -> dict:
             elif isinstance(tool_invocation_result, dict) and "messages" in tool_invocation_result:
                 tool_messages = tool_invocation_result.get("messages", [])
             else:
-                logger.warning(f"Unexpected tool_node output format: {type(tool_invocation_result)}")
+                print(f"WARNING: Unexpected tool_node output format: {type(tool_invocation_result)}")
                 tool_messages = []
 
             # Add tool results to conversation
             if not tool_messages:
-                logger.warning(f"Tool execution failed or returned no messages for task: {task}")
+                print(f"WARNING: Tool execution failed or returned no messages for task: {task}")
                 # Create error message for missing tool results
                 error_tool_call_id = response.tool_calls[0]['id'] if response.tool_calls else 'error_no_tool_call_id'
                 error_msg = ToolMessage(
@@ -179,107 +174,125 @@ async def agent_node(state: SolverState, config: RunnableConfig) -> dict:
                 )
                 messages.append(error_msg)
             else:
-                logger.debug(f"Adding {len(tool_messages)} tool result(s) to conversation")
+                print("\nTool Results:")
+                for idx, msg in enumerate(tool_messages, 1):
+                    # Show success/failure status for code execution
+                    if 'execute_python_code' in tool_names:
+                        try:
+                            import json
+                            result_data = json.loads(msg.content)
+                            if result_data.get('success'):
+                                output = result_data.get('output', '').strip()
+                                if output:
+                                    print(f"  ✓ Code executed successfully:")
+                                    print(f"    Output: {output}")
+                                else:
+                                    print(f"  ⚠ Code executed successfully but produced no output")
+                                    print(f"    Hint: Add print() statements to see results")
+                                    # Add a helpful message to the LLM
+                                    enhanced_msg = ToolMessage(
+                                        content=json.dumps({
+                                            **result_data,
+                                            "output": "Code executed successfully but produced no visible output. Consider adding print() statements to display results, variables, or return values so you can see what happened."
+                                        }),
+                                        tool_call_id=msg.tool_call_id
+                                    )
+                                    tool_messages[idx-1] = enhanced_msg
+                            else:
+                                print(f"  ✗ Code execution failed:")
+                                if result_data.get('errors', {}).get('error'):
+                                    print(f"    Error: {result_data['errors']['error']}")
+                                if result_data.get('errors', {}).get('traceback'):
+                                    print(f"    Traceback: {result_data['errors']['traceback']}")
+                        except Exception as parse_error:
+                            print(f"  Tool Result {idx} (raw): {msg.content}")
+                            print(f"  Parse error: {parse_error}")
+                    else:
+                        print(f"  Tool Result {idx}: {msg.content}")
                 messages.extend(tool_messages)
+            
+            print()  # Add spacing between iterations
 
     except Exception as e:
-        logger.error(f"Error during agent execution for task '{task}': {e}")
+        print(f"ERROR: Error during agent execution for task '{task}': {e}\n")
         result = f"Error encountered during execution: {e}"
 
     # Return the execution result
-    logger.info(f"Agent completed task '{task}' with result (capped): {result[:100]}...")
+    print(f"INFO: Agent completed task '{task}' with result (capped): {result[:100]}...\n")
     return {"past_steps": [(task, str(result))]}
 
 
 async def replanner_node(state: SolverState, config: RunnableConfig) -> dict:
     """
-    Evaluates execution progress and decides the next action.
-    
-    Analyzes the past step results and current plan to determine whether to:
-    - Continue with remaining plan steps
-    - Modify/replan the approach  
-    - Complete the task with a final response
-    
-    Args:
-        state: Current solver state with plan, past_steps, and input
-        config: Runtime configuration containing LLM and other settings
-        
-    Returns:
-        Dictionary with either updated plan (continue) or response (complete)
+    Evaluates progress and decides whether to continue with a new plan or provide final response.
     """
-    llm = config["configurable"]["llm"]
-    
-    # Format execution history for the replanner prompt
-    past_steps_formatted = "\n".join(
-        f"Step: {task}\nResult: {result}" 
-        for task, result in state.get('past_steps', [])
-    )
-    
-    # Format current plan for context
-    current_plan_formatted = "\n".join(
-        f"{i+1}. {step}" 
-        for i, step in enumerate(state.get('plan', []))
-    )
-    
-    # Validate that agent actually executed something
     num_completed = len(state.get('past_steps', []))
     if num_completed == 0:
-        logger.error("Replanner called but no steps were executed by agent")
+        print("ERROR: Replanner called but no steps were executed by agent")
         return {
             "response": "Error: No execution results to evaluate",
             "content": "",
             "plan": []
         }
     
-    logger.info(f"Replanner evaluating progress with {num_completed} completed steps")
-    logger.debug(f"Past steps: {past_steps_formatted}")
-    logger.debug(f"Current plan: {current_plan_formatted}")
+    print(f"Replanner evaluating progress ({num_completed} completed steps)")
 
     try:
-        # Use structured output to get Action decision
-        replanner = replanner_prompt | llm.with_structured_output(Act)
-        output = await replanner.ainvoke({
-            "input": state["input"],
+        # Format the past steps and current plan for the LLM
+        past_steps_formatted = "\n".join([
+            f"Step: {step}\nResult: {result}" 
+            for step, result in state.get('past_steps', [])
+        ])
+        
+        current_plan_formatted = "\n".join([
+            f"{i+1}. {step}" 
+            for i, step in enumerate(state.get('plan', []))
+        ])
+
+        # Get LLM decision on next action
+        llm = config["configurable"]["llm"]
+        replanner_chain = replanner_prompt | llm.with_structured_output(Act)
+        
+        output = await replanner_chain.ainvoke({
+            "input": state.get("input", ""),
             "plan": current_plan_formatted,
-            "past_steps": past_steps_formatted,
+            "past_steps": past_steps_formatted
         }, config=config)
 
-        # Process the action decision
         if isinstance(output.action, Response):
             # Task is complete - return final response
             final_content = output.action.content if output.action.content is not None else ""
-            logger.info("Replanner decided task is complete")
-            logger.debug(f"Final response: {output.action.response}")
+            print("✓ Task completed - generating final response")
             
             return {
                 "response": output.action.response,
                 "content": final_content,
                 "plan": []  # Clear plan to signal completion
             }
-            
         elif isinstance(output.action, Plan):
             # Continue with new/modified plan
             new_plan = output.action.steps
-            logger.info(f"Replanner created new plan with {len(new_plan)} steps:")
-            for i, step in enumerate(new_plan, 1):
-                logger.info(f"  {i}. {step}")
-                
-            return {"plan": new_plan}
+            print(f"→ Continuing with updated plan ({len(new_plan)} steps)")
             
+            return {
+                "plan": new_plan,
+                "content": "",
+                "response": None
+            }
         else:
             # Unexpected action type - handle gracefully
-            logger.error(f"Unexpected action type from replanner: {type(output.action)}")
+            print(f"ERROR: Unexpected action type from replanner: {type(output.action)}")
             return {
                 "plan": [], 
-                "response": "Replanning failed due to unexpected output format.", 
-                "content": ""
+                "content": "",
+                "response": "Error: Replanner returned unexpected action type"
             }
 
     except Exception as e:
-        logger.error(f"Error during replanning: {e}")
+        print(f"ERROR: Error during replanning: {e}")
         # End gracefully when replanner fails - don't try to be too smart
         return {
-            "response": f"Task incomplete due to replanning error: {e}",
+            "plan": [],
             "content": "",
-            "plan": []
+            "response": f"Error during replanning: {e}"
         }

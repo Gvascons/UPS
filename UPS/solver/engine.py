@@ -12,12 +12,12 @@ import argparse
 from .config import OUTPUT_DIR, METADATA_DIR
 from .schemas import SolverState
 from .graph import create_solver
-from .utils import save_graph_image
+from .utils import save_graph_image, create_initial_state
 
 # Select LLM provider
-from langchain_anthropic import ChatAnthropic
+# from langchain_anthropic import ChatAnthropic
 # from langchain_google_genai import ChatGoogleGenerativeAI
-# from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI
 
 # Add Langfuse imports
 from langfuse.callback import CallbackHandler
@@ -25,24 +25,13 @@ from langfuse.callback import CallbackHandler
 # Load environment variables (optional, if API keys are needed)
 dotenv.load_dotenv()
 
-# --- Initial State ---
-def create_initial_state(user_input: str) -> SolverState:
-    """Creates the initial state for the solver graph."""
-    return SolverState(
-        input=user_input,  # User input
-        plan=[],  # Initialize plan as empty list
-        past_steps=[],  # Initialize past_steps as empty list
-        response="",  # Initialize response as empty string
-        content="",  # Initialize content as empty string
-    )
-
 # --- Main Execution Loop ---
 async def run_graph(initial_state: SolverState, enable_tracing: bool = False, render_graph: bool = False):
     """Runs the solver graph asynchronously."""
     # Initialize the LLM (Choose one)
-    # llm = ChatOpenAI(model="gpt-4o-mini")
-    llm = ChatAnthropic(model="claude-3-7-sonnet-latest")
-    # llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
+    llm = ChatOpenAI(model="gpt-4o")
+    # llm = ChatAnthropic(model="claude-3-5-sonnet-latest")
+    # llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
     # Check if Langfuse tracing should be enabled
     langfuse_handler = None
@@ -81,14 +70,14 @@ async def run_graph(initial_state: SolverState, enable_tracing: bool = False, re
     # Variable to store the final state
     final_state = None
 
-    print("--- Starting Solver Execution ---")
+    print("\n--- Starting Solver Execution ---")
     async for step_output in solver_graph.astream(
         initial_state,
         config=config,
-        stream_mode="values"  # "values" gives the full state dict at each step
+        stream_mode="values"  # "values" gives the full state dict at each super step
     ):
         # step_output contains the full SolverState dictionary after a node runs
-        print("\n--- Solver Step Completed ---")
+        print("\n--- Solver Step Completed ---\n")
 
         # Print current plan
         current_plan = step_output.get("plan", [])
@@ -109,9 +98,7 @@ async def run_graph(initial_state: SolverState, enable_tracing: bool = False, re
         else:
             print("Final Response: None")
 
-        print("----------------------------\n")
-        # Add a small delay if needed for readability or rate limits
-        # await asyncio.sleep(0.1)
+        print("\n--------------------------------\n")
 
         # Store the current state as the latest state
         final_state = step_output
@@ -160,7 +147,7 @@ if __name__ == "__main__":
     # Ensure both directories exist (relative to CWD)
     os.makedirs(METADATA_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    print(f"Ensured directories exist: ./{METADATA_DIR}/ and ./{OUTPUT_DIR}/")
+    print(f"\nEnsured directories exist: ./{METADATA_DIR}/ and ./{OUTPUT_DIR}/")
 
     # --- Load User Input from File ---
     prompt_file_path = args.input_file  # Use the provided input file path
